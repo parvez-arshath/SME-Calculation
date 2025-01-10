@@ -10,13 +10,16 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -101,15 +104,27 @@ public class BaseClass {
 		return props;
 
 	}
+	
+
+	public static Properties calculatorData() throws IOException {
+		FileReader reader = new FileReader(
+				"C:\\Users\\impelox-pc-048\\eclipse-workspace\\CalculationSME\\target\\CalculationData.properties");
+		Properties props = new Properties();
+		props.load(reader);
+		return props;
+
+	}
+
 
 	public static void fetchDataFromDatabase(String dbURL, String dbUsername, String dbPassword, String query,
 			String excelFilePath, int sheetNum) throws SQLException {
+		// Database connection details
 		/*
-		 * // Database connection details String dbURL =
+		 * String dbURL =
 		 * "jdbc:mysql://aura-uat.cwfjz6cyloxy.me-south-1.rds.amazonaws.com:3306";
 		 * String dbUsername = "admin"; String dbPassword =
 		 * "zFs4upwKvvpRbbXcKSTf8La3MP4ymd"; String excelFilePath =
-		 * "C:\\Users\\impelox-pc-048\\eclipse-workspace\\Demo\\target\\Arshad AIAW Practice.xlsx"
+		 * "C:\\Users\\impelox-pc-048\\eclipse-workspace\\CalculationSME\\target\\Arshad AIAW.xlsx"
 		 * ;
 		 */
 
@@ -119,9 +134,16 @@ public class BaseClass {
 			// Connect to the database
 			connection = DriverManager.getConnection(dbURL, dbUsername, dbPassword);
 			/*
-			 * String query =
-			 * "SELECT * FROM  7003_group_medical_aiaw_transactions.premium where plan_id=1 and status=1;"
-			 * ;
+			 * String query = "SELECT\r\n" +
+			 * " gm.nationality_group_id,ng.group_name,ng.loading_discount,n.nationality\r\n"
+			 * + "FROM\r\n" +
+			 * "      uw_rules_SMEHealth_Dubai_Mednet_transactions.nationality_group_mapping gm\r\n"
+			 * + "LEFT JOIN\r\n" +
+			 * "      uw_rules_SMEHealth_Dubai_Mednet_transactions.nationality_group ng\r\n"
+			 * + "    ON ng.nationality_group_id = gm.nationality_group_id\r\n" +
+			 * "LEFT JOIN\r\n" +
+			 * " uw_rules_SMEHealth_Dubai_Mednet_transactions.nationality n\r\n" +
+			 * "    ON n.nationality_id = gm.nationality_id;";
 			 */
 			Statement statement = connection.createStatement();
 			ResultSet resultSet = statement.executeQuery(query);
@@ -133,12 +155,11 @@ public class BaseClass {
 
 			// Remove existing rows except the first row
 			int lastRow = sheet.getLastRowNum();
-
 			for (int i = 1; i <= lastRow; i++) {
 				Row row = sheet.getRow(i);
-				if (row != null) {
-					sheet.removeRow(row);
-				}
+				/*
+				 * if (row != null) { sheet.removeRow(row); }
+				 */
 			}
 
 			// Write new data to the Excel sheet
@@ -152,17 +173,23 @@ public class BaseClass {
 
 				// Loop through each column and write data
 				for (int i = 1; i <= resultSet.getMetaData().getColumnCount(); i++) {
+					// Stop writing after column 'O' (15th column, index 14)
+					if (i > 15) {
+						break;
+					}
+
 					Cell cell = row.getCell(i - 1);
 					if (cell == null) {
 						cell = row.createCell(i - 1);
 					}
 
 					// Preserve formulas: Skip overwriting if the cell is a formula
-					if (cell.getCellType() != CellType.FORMULA) {
-						cell.setCellValue(resultSet.getString(i));
-						String stringCellValue = cell.getStringCellValue();
-						System.out.println(stringCellValue);
+					if (cell.getCellType() == CellType.FORMULA) {
+						continue; // Skip cells with formulas
 					}
+
+					// Set new value from the database
+					cell.setCellValue(resultSet.getString(i));
 				}
 
 				rowCount++; // Move to the next row
@@ -193,4 +220,107 @@ public class BaseClass {
 			}
 		}
 	}
+
+	public static void toFetchCensusSheet(String sourceFilePath, String targetFilePath, int sourceSht, int targetSht) {
+		/*
+		 * String sourceFilePath =
+		 * "C:\\Users\\impelox-pc-048\\Desktop\\New folder\\census_ab_automation.xlsx";
+		 * // Source // Excel // file String targetFilePath =
+		 * "C:\\Users\\impelox-pc-048\\eclipse-workspace\\CalculationSME\\target\\Arshad AIAW.xlsx"
+		 * ; // Target // Excel // file
+		 */
+		try {
+// Open the source Excel file
+			FileInputStream sourceFile = new FileInputStream(new File(sourceFilePath));
+			Workbook sourceWorkbook = new XSSFWorkbook(sourceFile);
+			Sheet sourceSheet = sourceWorkbook.getSheetAt(sourceSht); // Source sheet
+
+// Open the target Excel file
+			FileInputStream targetFile = new FileInputStream(new File(targetFilePath));
+			Workbook targetWorkbook = new XSSFWorkbook(targetFile);
+			Sheet targetSheet = targetWorkbook.getSheetAt(targetSht); // Target sheet (modify index as needed)
+
+// Remove existing rows in the target sheet, except the first row
+			int lastRow = targetSheet.getLastRowNum();
+			for (int i = 1; i <= lastRow; i++) {
+				Row row = targetSheet.getRow(i);
+				if (row != null) {
+					targetSheet.removeRow(row);
+				}
+			}
+
+// Copy data from source sheet to target sheet
+			int rowCount = 1; // Start from the second row to preserve headers
+
+			for (int i = 1; i <= sourceSheet.getLastRowNum(); i++) { // Skip the first row
+				Row sourceRow = sourceSheet.getRow(i);
+				Row targetRow = targetSheet.createRow(rowCount);
+
+				if (sourceRow != null) {
+					for (int j = 0; j < sourceRow.getLastCellNum(); j++) {
+						Cell sourceCell = sourceRow.getCell(j);
+						Cell targetCell = targetRow.createCell(j);
+
+						if (sourceCell != null) {
+// Preserve formulas: Skip overwriting if the cell is a formula
+							if (targetCell.getCellType() == CellType.FORMULA) {
+								continue;
+							}
+
+// Copy the cell value based on the type
+							switch (sourceCell.getCellType()) {
+							case STRING:
+								targetCell.setCellValue(sourceCell.getStringCellValue());
+								break;
+							case NUMERIC:
+								if (DateUtil.isCellDateFormatted(sourceCell)) {
+									// Format the date as dd-MM-yyyy
+									Date date = sourceCell.getDateCellValue();
+									SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy");
+									targetCell.setCellValue(dateFormat.format(date));
+								} else {
+									targetCell.setCellValue(sourceCell.getNumericCellValue());
+								}
+								break;
+
+							case BOOLEAN:
+								targetCell.setCellValue(sourceCell.getBooleanCellValue());
+								break;
+							case FORMULA:
+								targetCell.setCellFormula(sourceCell.getCellFormula());
+								break;
+							case BLANK:
+								targetCell.setBlank();
+								break;
+							default:
+								break;
+							}
+
+						}
+					}
+				}
+				rowCount++;
+			}
+
+// Close the input files
+			sourceFile.close();
+			targetFile.close();
+
+// Save the changes to the target Excel file
+			FileOutputStream outputStream = new FileOutputStream(new File(targetFilePath));
+			targetWorkbook.write(outputStream);
+			outputStream.close();
+
+// Close the workbooks
+			sourceWorkbook.close();
+			targetWorkbook.close();
+
+			System.out.println("Data copied from source Excel to target Excel successfully.");
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+	}
+
 }
